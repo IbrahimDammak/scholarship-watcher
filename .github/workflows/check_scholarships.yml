@@ -1,0 +1,145 @@
+# Scholarship Watcher - Automated Scholarship Monitoring Pipeline
+#
+# This workflow periodically checks scholarship sources for Norway-related
+# Cloud/IT/Computer Science opportunities, detects new scholarships,
+# and creates GitHub Issues for notifications.
+#
+# Triggers:
+# - Scheduled: Daily at 8:00 AM UTC
+# - Manual: workflow_dispatch for on-demand runs
+
+name: Check Scholarships
+
+on:
+  # Scheduled run - daily at 8:00 AM UTC
+  schedule:
+    - cron: '0 8 * * *'
+  
+  # Manual trigger with optional inputs
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (no notifications)'
+        required: false
+        default: false
+        type: boolean
+      log_level:
+        description: 'Logging level'
+        required: false
+        default: 'INFO'
+        type: choice
+        options:
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+
+# Permissions required for creating issues
+permissions:
+  contents: read
+  issues: write
+
+# Prevent concurrent runs to avoid race conditions with data file
+concurrency:
+  group: scholarship-check
+  cancel-in-progress: false
+
+jobs:
+  check-scholarships:
+    name: Check for New Scholarships
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # Checkout repository to get source code and data
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history for proper git operations
+          fetch-depth: 0
+
+      # Set up Docker Buildx for improved build performance
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build Docker image with caching
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: scholarship-watcher:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Create data directory if it doesn't exist
+      - name: Ensure Data Directory Exists
+        run: |
+          mkdir -p data
+          if [ ! -f data/last_results.json ]; then
+            echo "[]" > data/last_results.json
+          fi
+
+      # Run the scholarship watcher pipeline
+      - name: Run Scholarship Watcher
+        id: run_watcher
+        run: |
+          docker run --rm \
+            -e GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
+            -e GITHUB_REPOSITORY="${{ github.repository }}" \
+            -e LOG_LEVEL="${{ inputs.log_level || 'INFO' }}" \
+            -e DRY_RUN="${{ inputs.dry_run || 'false' }}" \
+            -v "${{ github.workspace }}/data:/app/data" \
+            scholarship-watcher:latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Commit and push updated results if there are changes
+      - name: Commit Updated Results
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          if git diff --quiet data/last_results.json; then
+            echo "No changes to results file"
+          else
+            git add data/last_results.json
+            git commit -m "chore: update scholarship results [skip ci]"
+            git push
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Run tests on push and PR (separate job)
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Tests with Coverage
+        run: |
+          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Upload Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
