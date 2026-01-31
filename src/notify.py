@@ -1,15 +1,22 @@
 """
 Notify module for the Scholarship Watcher pipeline.
 
-This module handles creating GitHub Issues when new scholarships are detected.
+This module handles creating notifications when new scholarships are detected.
+Supports two notification channels:
+- GitHub Issues (primary)
+- Email via SMTP with TLS (optional, for daily digest)
+
 Uses the GitHub REST API with proper error handling for rate limits and
-validation errors.
+validation errors. Email notifications use smtplib with TLS encryption.
 """
 
 import json
 import os
+import smtplib
+import ssl
 import time
 from datetime import datetime
+from email.message import EmailMessage
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -405,4 +412,319 @@ def check_github_connection() -> bool:
             
     except Exception as e:
         logger.warning(f"GitHub connection check failed: {e}")
+        return False
+
+
+# =============================================================================
+# Email Notification Functions
+# =============================================================================
+
+
+class EmailNotificationError(Exception):
+    """Custom exception for email notification errors."""
+    
+    def __init__(self, message: str, original_error: Optional[Exception] = None):
+        super().__init__(message)
+        self.original_error = original_error
+
+
+def get_email_credentials() -> Tuple[str, int, str, str, str, str]:
+    """
+    Get email credentials from environment variables.
+    
+    Returns:
+        Tuple of (smtp_host, smtp_port, smtp_user, smtp_password, email_from, email_to).
+        
+    Raises:
+        ValueError: If any required environment variable is not set.
+    """
+    smtp_host = get_env_var("SMTP_HOST", required=True)
+    smtp_port_str = get_env_var("SMTP_PORT", required=True)
+    smtp_user = get_env_var("SMTP_USER", required=True)
+    smtp_password = get_env_var("SMTP_PASSWORD", required=True)
+    email_from = get_env_var("EMAIL_FROM", required=True)
+    email_to = get_env_var("EMAIL_TO", required=True)
+    
+    # Type assertions - get_env_var with required=True raises ValueError if None
+    assert smtp_host is not None
+    assert smtp_port_str is not None
+    assert smtp_user is not None
+    assert smtp_password is not None
+    assert email_from is not None
+    assert email_to is not None
+    
+    # Parse port as integer
+    try:
+        smtp_port = int(smtp_port_str)
+    except ValueError:
+        raise ValueError(f"SMTP_PORT must be a valid integer, got: {smtp_port_str}")
+    
+    return smtp_host, smtp_port, smtp_user, smtp_password, email_from, email_to
+
+
+def is_email_configured() -> bool:
+    """
+    Check if email notification is configured.
+    
+    Returns:
+        True if all email environment variables are set, False otherwise.
+    """
+    required_vars = [
+        "SMTP_HOST", "SMTP_PORT", "SMTP_USER", 
+        "SMTP_PASSWORD", "EMAIL_FROM", "EMAIL_TO"
+    ]
+    
+    for var in required_vars:
+        value = os.environ.get(var)
+        if not value or value.strip() == "":
+            return False
+    
+    return True
+
+
+def format_email_body_html(scholarships: List[Dict[str, str]]) -> str:
+    """
+    Format the email body as HTML with scholarship information.
+    
+    Args:
+        scholarships: List of scholarship dictionaries with 'title' and 'url'.
+        
+    Returns:
+        Formatted HTML string for email body.
+    """
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    
+    html_lines = [
+        "<!DOCTYPE html>",
+        "<html>",
+        "<head>",
+        '  <meta charset="utf-8">',
+        "  <style>",
+        "    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }",
+        "    .header { background-color: #4a90d9; color: white; padding: 20px; border-radius: 5px 5px 0 0; }",
+        "    .content { padding: 20px; background-color: #f9f9f9; }",
+        "    .scholarship { background-color: white; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #4a90d9; }",
+        "    .scholarship a { color: #4a90d9; text-decoration: none; font-weight: bold; }",
+        "    .scholarship a:hover { text-decoration: underline; }",
+        "    .footer { padding: 15px; font-size: 12px; color: #666; text-align: center; border-top: 1px solid #ddd; }",
+        "    .count { font-size: 24px; font-weight: bold; }",
+        "  </style>",
+        "</head>",
+        "<body>",
+        '  <div class="header">',
+        "    <h1>🎓 New Scholarships Detected!</h1>",
+        f"    <p>Detection Time: {timestamp}</p>",
+        "  </div>",
+        '  <div class="content">',
+        f'    <p class="count">{len(scholarships)} new scholarship{"s" if len(scholarships) != 1 else ""} found!</p>',
+        "    <p>The following scholarships related to Cloud, IT, and Computer Science in Norway have been detected:</p>",
+    ]
+    
+    for i, scholarship in enumerate(scholarships, 1):
+        title = scholarship.get("title", "Unknown Title")
+        url = scholarship.get("url", "#")
+        
+        # Escape HTML special characters in title
+        escaped_title = (
+            title
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
+        
+        html_lines.extend([
+            f'    <div class="scholarship">',
+            f'      <strong>{i}.</strong> <a href="{url}">{escaped_title}</a>',
+            "    </div>",
+        ])
+    
+    html_lines.extend([
+        "  </div>",
+        '  <div class="footer">',
+        "    <p>This email was automatically sent by the Scholarship Watcher pipeline.</p>",
+        "    <p>Please review each scholarship for eligibility and deadlines.</p>",
+        "  </div>",
+        "</body>",
+        "</html>",
+    ])
+    
+    return "\n".join(html_lines)
+
+
+def format_email_body_plain(scholarships: List[Dict[str, str]]) -> str:
+    """
+    Format the email body as plain text with scholarship information.
+    
+    Args:
+        scholarships: List of scholarship dictionaries with 'title' and 'url'.
+        
+    Returns:
+        Formatted plain text string for email body.
+    """
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    
+    lines = [
+        "🎓 NEW SCHOLARSHIPS DETECTED!",
+        "=" * 50,
+        "",
+        f"Detection Time: {timestamp}",
+        f"Number of New Scholarships: {len(scholarships)}",
+        "",
+        "-" * 50,
+        "",
+        "SCHOLARSHIPS FOUND:",
+        "",
+    ]
+    
+    for i, scholarship in enumerate(scholarships, 1):
+        title = scholarship.get("title", "Unknown Title")
+        url = scholarship.get("url", "#")
+        
+        lines.append(f"{i}. {title}")
+        lines.append(f"   URL: {url}")
+        lines.append("")
+    
+    lines.extend([
+        "-" * 50,
+        "",
+        "This email was automatically sent by the Scholarship Watcher pipeline.",
+        "Please review each scholarship for eligibility and deadlines.",
+    ])
+    
+    return "\n".join(lines)
+
+
+def send_email_notification(
+    scholarships: List[Dict[str, str]],
+    dry_run: bool = False
+) -> bool:
+    """
+    Send an email notification about new scholarships via SMTP with TLS.
+    
+    Args:
+        scholarships: List of new scholarship dictionaries.
+        dry_run: If True, don't actually send the email, just log.
+        
+    Returns:
+        True if email was sent successfully, False otherwise.
+        
+    Note:
+        This function fails gracefully - it logs errors but does not raise
+        exceptions to avoid crashing the pipeline.
+    """
+    if not scholarships:
+        logger.info("No new scholarships to send email about")
+        return True
+    
+    # Check if email is configured
+    if not is_email_configured():
+        logger.info("Email notifications not configured (missing environment variables)")
+        return True  # Not an error - email is optional
+    
+    logger.info(f"Sending email notification about {len(scholarships)} new scholarship(s)")
+    
+    try:
+        # Get credentials
+        smtp_host, smtp_port, smtp_user, smtp_password, email_from, email_to = get_email_credentials()
+        
+        # Format email content
+        date_str = datetime.utcnow().strftime("%Y-%m-%d")
+        subject = "🎓 New Cloud & IT Scholarships in Norway – Daily Update"
+        
+        html_body = format_email_body_html(scholarships)
+        plain_body = format_email_body_plain(scholarships)
+        
+        if dry_run:
+            logger.info(f"[DRY RUN] Would send email to: {email_to}")
+            logger.info(f"[DRY RUN] Subject: {subject}")
+            logger.debug(f"[DRY RUN] Plain body:\n{plain_body}")
+            return True
+        
+        # Create email message
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = email_from
+        msg["To"] = email_to
+        msg["Date"] = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
+        
+        # Set plain text content
+        msg.set_content(plain_body)
+        
+        # Add HTML alternative
+        msg.add_alternative(html_body, subtype="html")
+        
+        # Create SSL context for TLS
+        ssl_context = ssl.create_default_context()
+        
+        # Send email via SMTP with STARTTLS
+        logger.debug(f"Connecting to SMTP server: {smtp_host}:{smtp_port}")
+        
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+            # Enable TLS encryption
+            server.starttls(context=ssl_context)
+            
+            # Authenticate
+            server.login(smtp_user, smtp_password)
+            
+            # Send email
+            server.send_message(msg)
+        
+        logger.info(f"Email notification sent successfully to {email_to}")
+        return True
+        
+    except ValueError as e:
+        logger.error(f"Email configuration error: {e}")
+        return False
+        
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"SMTP authentication failed: {e}")
+        return False
+        
+    except smtplib.SMTPConnectError as e:
+        logger.error(f"Failed to connect to SMTP server: {e}")
+        return False
+        
+    except smtplib.SMTPException as e:
+        logger.error(f"SMTP error while sending email: {e}")
+        return False
+        
+    except ssl.SSLError as e:
+        logger.error(f"SSL/TLS error while sending email: {e}")
+        return False
+        
+    except TimeoutError as e:
+        logger.error(f"Timeout while sending email: {e}")
+        return False
+        
+    except Exception as e:
+        logger.error(f"Unexpected error sending email notification: {e}")
+        return False
+
+
+def check_email_connection() -> bool:
+    """
+    Verify SMTP connection and credentials.
+    
+    Returns:
+        True if connection is successful, False otherwise.
+    """
+    if not is_email_configured():
+        logger.debug("Email not configured, skipping connection check")
+        return False
+    
+    try:
+        smtp_host, smtp_port, smtp_user, smtp_password, _, _ = get_email_credentials()
+        
+        ssl_context = ssl.create_default_context()
+        
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+            server.starttls(context=ssl_context)
+            server.login(smtp_user, smtp_password)
+        
+        logger.debug(f"Email connection OK, authenticated with {smtp_user}")
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Email connection check failed: {e}")
         return False

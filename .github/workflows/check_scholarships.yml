@@ -90,6 +90,12 @@ jobs:
             -e GITHUB_REPOSITORY="${{ github.repository }}" \
             -e LOG_LEVEL="${{ inputs.log_level || 'INFO' }}" \
             -e DRY_RUN="${{ inputs.dry_run || 'false' }}" \
+            -e SMTP_HOST="${{ secrets.SMTP_HOST }}" \
+            -e SMTP_PORT="${{ secrets.SMTP_PORT }}" \
+            -e SMTP_USER="${{ secrets.SMTP_USER }}" \
+            -e SMTP_PASSWORD="${{ secrets.SMTP_PASSWORD }}" \
+            -e EMAIL_FROM="${{ secrets.EMAIL_FROM }}" \
+            -e EMAIL_TO="${{ secrets.EMAIL_TO }}" \
             -v "${{ github.workspace }}/data:/app/data" \
             scholarship-watcher:latest
         env:

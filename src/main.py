@@ -18,7 +18,14 @@ from src.fetch import fetch_scholarship_pages, get_successful_fetches, DEFAULT_S
 from src.parse import parse_fetch_results
 from src.filter import filter_scholarships
 from src.compare import compare_and_update, DEFAULT_RESULTS_PATH
-from src.notify import notify_new_scholarships, check_github_connection, GitHubAPIError
+from src.notify import (
+    notify_new_scholarships,
+    check_github_connection,
+    GitHubAPIError,
+    send_email_notification,
+    check_email_connection,
+    is_email_configured
+)
 
 
 # Exit codes
@@ -134,6 +141,12 @@ def run_pipeline(dry_run: bool = False) -> int:
         logger.info("Verifying GitHub connection...")
         if not check_github_connection():
             logger.warning("GitHub connection check failed, notifications may fail")
+        
+        # Check email connection if configured
+        if is_email_configured():
+            logger.info("Verifying email connection...")
+            if not check_email_connection():
+                logger.warning("Email connection check failed, email notifications may fail")
     
     # Stage 2: Fetch scholarship pages
     logger.info("[Stage 2/6] Fetching scholarship pages...")
@@ -218,6 +231,21 @@ def run_pipeline(dry_run: bool = False) -> int:
         except ValueError as e:
             logger.error(f"Configuration error: {e}")
             return EXIT_ENV_ERROR
+        
+        # Send email notification (if configured)
+        # Email fails gracefully - won't crash pipeline
+        if is_email_configured():
+            logger.info("Sending email notification...")
+            email_sent = send_email_notification(
+                new_scholarships,
+                dry_run=dry_run
+            )
+            if email_sent:
+                logger.info("Email notification sent successfully")
+            else:
+                logger.warning("Email notification failed (see logs above)")
+        else:
+            logger.debug("Email notifications not configured, skipping")
     else:
         logger.info("No new scholarships to notify about")
     
