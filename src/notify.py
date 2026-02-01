@@ -203,6 +203,131 @@ def format_issue_title(scholarship_count: int) -> str:
     return f"🎓 {scholarship_count} New Scholarship{plural} Found - {date_str}"
 
 
+def format_issue_title_multi_country(
+    scholarships_by_country: Dict[str, List[Dict[str, str]]],
+    country_names: Dict[str, str]
+) -> str:
+    """
+    Format GitHub Issue title for multi-country results.
+    
+    Args:
+        scholarships_by_country: Scholarships grouped by country code.
+        country_names: Mapping of country codes to names.
+        
+    Returns:
+        Issue title string.
+    """
+    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    total_count = sum(len(v) for v in scholarships_by_country.values())
+    country_count = len([c for c, s in scholarships_by_country.items() if s])
+    
+    plural_s = "s" if total_count != 1 else ""
+    plural_c = "ies" if country_count != 1 else "y"
+    
+    return f"🎓 {total_count} New Scholarship{plural_s} ({country_count} Countr{plural_c}) - {date_str}"
+
+
+def format_issue_body_multi_country(
+    scholarships_by_country: Dict[str, List[Dict[str, str]]],
+    country_names: Dict[str, str]
+) -> str:
+    """
+    Format GitHub Issue body with scholarships grouped by country.
+    
+    Args:
+        scholarships_by_country: Scholarships grouped by country code.
+        country_names: Mapping of country codes to names.
+        
+    Returns:
+        Formatted markdown string for issue body.
+    """
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    total_count = sum(len(v) for v in scholarships_by_country.values())
+    
+    lines = [
+        "## 🎓 New Scholarships Detected!",
+        "",
+        f"**Detection Time:** {timestamp}",
+        f"**Total New Scholarships:** {total_count}",
+        f"**Countries:** {len([c for c, s in scholarships_by_country.items() if s])}",
+        "",
+        "---",
+        ""
+    ]
+    
+    # Sort countries by name for consistent output
+    sorted_countries = sorted(
+        [(code, schols) for code, schols in scholarships_by_country.items() if schols],
+        key=lambda x: country_names.get(x[0], x[0])
+    )
+    
+    for country_code, scholarships in sorted_countries:
+        country_name = country_names.get(country_code, country_code)
+        flag = _get_country_flag(country_code)
+        
+        lines.extend([
+            f"### {flag} {country_name} ({len(scholarships)})",
+            ""
+        ])
+        
+        for i, scholarship in enumerate(scholarships, 1):
+            title = scholarship.get("title", "Unknown Title")
+            url = scholarship.get("url", "#")
+            
+            escaped_title = title.replace("[", "\\[").replace("]", "\\]")
+            lines.append(f"{i}. [{escaped_title}]({url})")
+        
+        lines.append("")
+    
+    lines.extend([
+        "---",
+        "",
+        "*This issue was automatically created by the Scholarship Watcher pipeline.*",
+        "*Please review each scholarship for eligibility and deadlines.*"
+    ])
+    
+    return "\n".join(lines)
+
+
+def _get_country_flag(country_code: str) -> str:
+    """
+    Get emoji flag for a country code.
+    
+    Args:
+        country_code: ISO-2 country code.
+        
+    Returns:
+        Flag emoji or empty string if not found.
+    """
+    flags = {
+        "NO": "🇳🇴",
+        "SE": "🇸🇪",
+        "DE": "🇩🇪",
+        "NL": "🇳🇱",
+        "DK": "🇩🇰",
+        "FI": "🇫🇮",
+        "US": "🇺🇸",
+        "UK": "🇬🇧",
+        "GB": "🇬🇧",
+        "CA": "🇨🇦",
+        "AU": "🇦🇺",
+        "FR": "🇫🇷",
+        "CH": "🇨🇭",
+        "AT": "🇦🇹",
+        "BE": "🇧🇪",
+        "IE": "🇮🇪",
+        "IT": "🇮🇹",
+        "ES": "🇪🇸",
+        "PT": "🇵🇹",
+        "PL": "🇵🇱",
+        "CZ": "🇨🇿",
+        "JP": "🇯🇵",
+        "KR": "🇰🇷",
+        "SG": "🇸🇬",
+    }
+    return flags.get(country_code.upper(), "🌍")
+
+
 def create_issue(
     session: requests.Session,
     owner: str,
@@ -378,6 +503,90 @@ def notify_new_scholarships(
         
         issue_url = issue_data.get("html_url", "")
         logger.info(f"Issue created successfully: {issue_url}")
+        
+        return issue_data
+        
+    except GitHubAPIError as e:
+        logger.error(f"Failed to create GitHub issue: {e}")
+        raise
+    finally:
+        session.close()
+
+
+def notify_new_scholarships_multi_country(
+    scholarships_by_country: Dict[str, List[Dict[str, str]]],
+    country_names: Dict[str, str],
+    labels: Optional[List[str]] = None,
+    dry_run: bool = False
+) -> Optional[Dict[str, Any]]:
+    """
+    Create a GitHub Issue with scholarships grouped by country.
+    
+    Args:
+        scholarships_by_country: Scholarships grouped by country code.
+        country_names: Mapping of country codes to human-readable names.
+        labels: Optional list of labels for the issue.
+        dry_run: If True, don't actually create the issue, just log.
+        
+    Returns:
+        Created issue data if successful, None if no scholarships or dry_run.
+        
+    Raises:
+        ValueError: If required environment variables are missing.
+        GitHubAPIError: If issue creation fails.
+    """
+    # Filter out empty countries
+    non_empty = {c: s for c, s in scholarships_by_country.items() if s}
+    
+    if not non_empty:
+        logger.info("No new scholarships to notify about (multi-country)")
+        return None
+    
+    total_count = sum(len(v) for v in non_empty.values())
+    logger.info(
+        f"Notifying about {total_count} new scholarship(s) "
+        f"across {len(non_empty)} countries"
+    )
+    
+    # Get credentials
+    try:
+        token, repository = get_github_credentials()
+        owner, repo = parse_repository(repository)
+    except ValueError as e:
+        logger.error(f"Failed to get GitHub credentials: {e}")
+        raise
+    
+    # Format issue content
+    title = format_issue_title_multi_country(non_empty, country_names)
+    body = format_issue_body_multi_country(non_empty, country_names)
+    
+    if dry_run:
+        logger.info(f"[DRY RUN] Would create issue: {title}")
+        logger.debug(f"[DRY RUN] Issue body:\n{body}")
+        return None
+    
+    # Create session and issue
+    session = create_github_session(token)
+    
+    # Build labels including country codes
+    all_labels = list(labels or ["scholarship", "automated"])
+    for country_code in non_empty.keys():
+        country_label = f"country:{country_code.lower()}"
+        if country_label not in all_labels:
+            all_labels.append(country_label)
+    
+    try:
+        issue_data = create_issue(
+            session=session,
+            owner=owner,
+            repo=repo,
+            title=title,
+            body=body,
+            labels=all_labels
+        )
+        
+        issue_url = issue_data.get("html_url", "")
+        logger.info(f"Multi-country issue created successfully: {issue_url}")
         
         return issue_data
         
@@ -595,6 +804,169 @@ def format_email_body_plain(scholarships: List[Dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
+def format_email_body_html_multi_country(
+    scholarships_by_country: Dict[str, List[Dict[str, str]]],
+    country_names: Dict[str, str]
+) -> str:
+    """
+    Format email body as HTML with scholarships grouped by country.
+    
+    Args:
+        scholarships_by_country: Scholarships grouped by country code.
+        country_names: Mapping of country codes to names.
+        
+    Returns:
+        Formatted HTML string for email body.
+    """
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    total_count = sum(len(v) for v in scholarships_by_country.values())
+    country_count = len([c for c, s in scholarships_by_country.items() if s])
+    
+    html_lines = [
+        "<!DOCTYPE html>",
+        "<html>",
+        "<head>",
+        '  <meta charset="utf-8">',
+        "  <style>",
+        "    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }",
+        "    .header { background-color: #4a90d9; color: white; padding: 20px; border-radius: 5px 5px 0 0; }",
+        "    .content { padding: 20px; background-color: #f9f9f9; }",
+        "    .country-section { margin-bottom: 25px; }",
+        "    .country-header { background-color: #2c5282; color: white; padding: 10px 15px; border-radius: 5px 5px 0 0; margin-bottom: 0; }",
+        "    .country-header h3 { margin: 0; font-size: 18px; }",
+        "    .scholarship { background-color: white; padding: 12px 15px; margin: 0; border-left: 4px solid #4a90d9; border-bottom: 1px solid #eee; }",
+        "    .scholarship:last-child { border-radius: 0 0 5px 5px; border-bottom: none; }",
+        "    .scholarship a { color: #4a90d9; text-decoration: none; font-weight: bold; }",
+        "    .scholarship a:hover { text-decoration: underline; }",
+        "    .footer { padding: 15px; font-size: 12px; color: #666; text-align: center; border-top: 1px solid #ddd; }",
+        "    .count { font-size: 24px; font-weight: bold; }",
+        "    .summary { background-color: #e8f0fe; padding: 15px; border-radius: 5px; margin-bottom: 20px; }",
+        "  </style>",
+        "</head>",
+        "<body>",
+        '  <div class="header">',
+        "    <h1>🎓 New Cloud & IT Scholarships – Multi-Country Daily Update</h1>",
+        f"    <p>Detection Time: {timestamp}</p>",
+        "  </div>",
+        '  <div class="content">',
+        '    <div class="summary">',
+        f'      <p class="count">{total_count} new scholarship{"s" if total_count != 1 else ""} found across {country_count} {"countries" if country_count != 1 else "country"}!</p>',
+        "    </div>",
+    ]
+    
+    # Sort countries by name
+    sorted_countries = sorted(
+        [(code, schols) for code, schols in scholarships_by_country.items() if schols],
+        key=lambda x: country_names.get(x[0], x[0])
+    )
+    
+    for country_code, scholarships in sorted_countries:
+        country_name = country_names.get(country_code, country_code)
+        flag = _get_country_flag(country_code)
+        
+        html_lines.extend([
+            '    <div class="country-section">',
+            '      <div class="country-header">',
+            f'        <h3>{flag} {country_name} ({len(scholarships)})</h3>',
+            "      </div>",
+        ])
+        
+        for i, scholarship in enumerate(scholarships, 1):
+            title = scholarship.get("title", "Unknown Title")
+            url = scholarship.get("url", "#")
+            
+            escaped_title = (
+                title
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace('"', "&quot;")
+            )
+            
+            html_lines.extend([
+                f'      <div class="scholarship">',
+                f'        <strong>{i}.</strong> <a href="{url}">{escaped_title}</a>',
+                "      </div>",
+            ])
+        
+        html_lines.append("    </div>")
+    
+    html_lines.extend([
+        "  </div>",
+        '  <div class="footer">',
+        "    <p>This email was automatically sent by the Scholarship Watcher pipeline.</p>",
+        "    <p>Please review each scholarship for eligibility and deadlines.</p>",
+        "  </div>",
+        "</body>",
+        "</html>",
+    ])
+    
+    return "\n".join(html_lines)
+
+
+def format_email_body_plain_multi_country(
+    scholarships_by_country: Dict[str, List[Dict[str, str]]],
+    country_names: Dict[str, str]
+) -> str:
+    """
+    Format email body as plain text with scholarships grouped by country.
+    
+    Args:
+        scholarships_by_country: Scholarships grouped by country code.
+        country_names: Mapping of country codes to names.
+        
+    Returns:
+        Formatted plain text string for email body.
+    """
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    total_count = sum(len(v) for v in scholarships_by_country.values())
+    country_count = len([c for c, s in scholarships_by_country.items() if s])
+    
+    lines = [
+        "🎓 NEW CLOUD & IT SCHOLARSHIPS – MULTI-COUNTRY DAILY UPDATE",
+        "=" * 60,
+        "",
+        f"Detection Time: {timestamp}",
+        f"Total New Scholarships: {total_count}",
+        f"Countries: {country_count}",
+        "",
+    ]
+    
+    # Sort countries by name
+    sorted_countries = sorted(
+        [(code, schols) for code, schols in scholarships_by_country.items() if schols],
+        key=lambda x: country_names.get(x[0], x[0])
+    )
+    
+    for country_code, scholarships in sorted_countries:
+        country_name = country_names.get(country_code, country_code)
+        flag = _get_country_flag(country_code)
+        
+        lines.extend([
+            "-" * 60,
+            f"{flag} {country_name.upper()} ({len(scholarships)} scholarship{'s' if len(scholarships) != 1 else ''})",
+            "-" * 60,
+            "",
+        ])
+        
+        for i, scholarship in enumerate(scholarships, 1):
+            title = scholarship.get("title", "Unknown Title")
+            url = scholarship.get("url", "#")
+            
+            lines.append(f"{i}. {title}")
+            lines.append(f"   URL: {url}")
+            lines.append("")
+    
+    lines.extend([
+        "=" * 60,
+        "",
+        "This email was automatically sent by the Scholarship Watcher pipeline.",
+        "Please review each scholarship for eligibility and deadlines.",
+    ])
+    
+    return "\n".join(lines)
+
+
 def send_email_notification(
     scholarships: List[Dict[str, str]],
     dry_run: bool = False
@@ -714,6 +1086,129 @@ def send_email_notification(
         
     except Exception as e:
         logger.error(f"Unexpected error sending email notification: {e}")
+        return False
+
+
+def send_email_notification_multi_country(
+    scholarships_by_country: Dict[str, List[Dict[str, str]]],
+    country_names: Dict[str, str],
+    dry_run: bool = False
+) -> bool:
+    """
+    Send email notification with scholarships grouped by country.
+    
+    Supports both:
+    - Port 465: SMTP_SSL (implicit TLS)
+    - Port 587: SMTP with STARTTLS (explicit TLS)
+    
+    Args:
+        scholarships_by_country: Scholarships grouped by country code.
+        country_names: Mapping of country codes to names.
+        dry_run: If True, don't actually send the email, just log.
+        
+    Returns:
+        True if email was sent successfully, False otherwise.
+        
+    Note:
+        This function fails gracefully - it logs errors but does not raise
+        exceptions to avoid crashing the pipeline.
+    """
+    # Filter out empty countries
+    non_empty = {c: s for c, s in scholarships_by_country.items() if s}
+    
+    if not non_empty:
+        logger.info("No new scholarships to send email about (multi-country)")
+        return True
+    
+    # Check if email is configured
+    if not is_email_configured():
+        logger.info("Email notifications not configured (missing environment variables)")
+        return True
+    
+    total_count = sum(len(v) for v in non_empty.values())
+    logger.info(
+        f"Sending multi-country email notification about {total_count} scholarship(s) "
+        f"across {len(non_empty)} countries"
+    )
+    
+    try:
+        # Get credentials
+        smtp_host, smtp_port, smtp_user, smtp_password, email_from, email_to = get_email_credentials()
+        
+        logger.info(f"Email config: host={smtp_host}, port={smtp_port}, from={email_from}, to={email_to}")
+        
+        # Format email content
+        subject = "🎓 New Cloud & IT Scholarships – Multi-Country Daily Update"
+        
+        html_body = format_email_body_html_multi_country(non_empty, country_names)
+        plain_body = format_email_body_plain_multi_country(non_empty, country_names)
+        
+        if dry_run:
+            logger.info(f"[DRY RUN] Would send multi-country email to: {email_to}")
+            logger.info(f"[DRY RUN] Subject: {subject}")
+            logger.debug(f"[DRY RUN] Plain body:\n{plain_body}")
+            return True
+        
+        # Create email message
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = email_from
+        msg["To"] = email_to
+        msg["Date"] = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
+        
+        # Set plain text content
+        msg.set_content(plain_body)
+        
+        # Add HTML alternative
+        msg.add_alternative(html_body, subtype="html")
+        
+        # Create SSL context for TLS
+        ssl_context = ssl.create_default_context()
+        
+        # Send email - use different method based on port
+        logger.info(f"Connecting to SMTP server: {smtp_host}:{smtp_port}")
+        
+        if smtp_port == 465:
+            logger.debug("Using SMTP_SSL (implicit TLS) for port 465")
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30, context=ssl_context) as server:
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+        else:
+            logger.debug(f"Using SMTP with STARTTLS for port {smtp_port}")
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+                server.starttls(context=ssl_context)
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+        
+        logger.info(f"Multi-country email notification sent successfully to {email_to}")
+        return True
+        
+    except ValueError as e:
+        logger.error(f"Email configuration error: {e}")
+        return False
+        
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"SMTP authentication failed: {e}")
+        return False
+        
+    except smtplib.SMTPConnectError as e:
+        logger.error(f"Failed to connect to SMTP server: {e}")
+        return False
+        
+    except smtplib.SMTPException as e:
+        logger.error(f"SMTP error while sending email: {e}")
+        return False
+        
+    except ssl.SSLError as e:
+        logger.error(f"SSL/TLS error while sending email: {e}")
+        return False
+        
+    except TimeoutError as e:
+        logger.error(f"Timeout while sending email: {e}")
+        return False
+        
+    except Exception as e:
+        logger.error(f"Unexpected error sending multi-country email: {e}")
         return False
 
 

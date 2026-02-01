@@ -1,0 +1,116 @@
+{
+  "countries": [
+    {
+      "code": "NO",
+      "name": "Norway",
+      "enabled": true,
+      "keywords": [
+        "norway",
+        "norwegian",
+        "norge",
+        "norsk",
+        "oslo",
+        "bergen",
+        "trondheim",
+        "stavanger",
+        "tromsø",
+        "tromso",
+        "ntnu",
+        "uio",
+        "uib"
+      ],
+      "domain_patterns": [".no"]
+    },
+    {
+      "code": "SE",
+      "name": "Sweden",
+      "enabled": true,
+      "keywords": [
+        "sweden",
+        "swedish",
+        "sverige",
+        "svenska",
+        "stockholm",
+        "gothenburg",
+        "malmö",
+        "malmo",
+        "uppsala",
+        "kth",
+        "chalmers"
+      ],
+      "domain_patterns": [".se"]
+    },
+    {
+      "code": "DE",
+      "name": "Germany",
+      "enabled": true,
+      "keywords": [
+        "germany",
+        "german",
+        "deutschland",
+        "deutsch",
+        "berlin",
+        "munich",
+        "münchen",
+        "frankfurt",
+        "hamburg",
+        "daad",
+        "tu munich",
+        "tu berlin"
+      ],
+      "domain_patterns": [".de"]
+    },
+    {
+      "code": "NL",
+      "name": "Netherlands",
+      "enabled": true,
+      "keywords": [
+        "netherlands",
+        "dutch",
+        "holland",
+        "amsterdam",
+        "rotterdam",
+        "delft",
+        "eindhoven",
+        "tu delft"
+      ],
+      "domain_patterns": [".nl"]
+    },
+    {
+      "code": "DK",
+      "name": "Denmark",
+      "enabled": true,
+      "keywords": [
+        "denmark",
+        "danish",
+        "danmark",
+        "dansk",
+        "copenhagen",
+        "aarhus",
+        "dtu"
+      ],
+      "domain_patterns": [".dk"]
+    },
+    {
+      "code": "FI",
+      "name": "Finland",
+      "enabled": true,
+      "keywords": [
+        "finland",
+        "finnish",
+        "suomi",
+        "helsinki",
+        "aalto",
+        "tampere"
+      ],
+      "domain_patterns": [".fi"]
+    }
+  ],
+  "global_keywords": [
+    "nordic",
+    "scandinavia",
+    "scandinavian",
+    "european union",
+    "eu scholarship"
+  ]
+}

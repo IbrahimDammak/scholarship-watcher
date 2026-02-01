@@ -2,14 +2,17 @@
 Filter module for the Scholarship Watcher pipeline.
 
 This module handles filtering scholarships based on relevance criteria:
-- Norway-related content
+- Country-specific content (configurable, supports multiple countries)
 - Cloud / IT / Computer Science / Engineering keywords
 """
 
 import re
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, TYPE_CHECKING
 
-from src.utils import get_logger
+from src.utils import get_logger, CountryConfig, load_countries_config
+
+if TYPE_CHECKING:
+    from src.utils import CountryConfig
 
 
 # Module logger
@@ -385,3 +388,226 @@ def filter_scholarships_flexible(
     )
     
     return filtered
+
+
+# =============================================================================
+# Multi-Country Filtering Functions
+# =============================================================================
+
+
+def is_country_relevant(
+    scholarship: Dict[str, str],
+    country: "CountryConfig"
+) -> bool:
+    """
+    Check if a scholarship is relevant to a specific country.
+    
+    Args:
+        scholarship: Dictionary with 'title' and 'url' keys.
+        country: CountryConfig object with keywords and domain patterns.
+        
+    Returns:
+        True if scholarship matches country criteria, False otherwise.
+    """
+    title = scholarship.get("title", "")
+    url = scholarship.get("url", "").lower()
+    combined = f"{title} {url}"
+    
+    # Check keywords
+    if contains_any_keyword(combined, country.keywords):
+        return True
+    
+    # Check domain patterns
+    for pattern in country.domain_patterns:
+        if pattern in url:
+            return True
+    
+    return False
+
+
+def get_matching_countries(
+    scholarship: Dict[str, str],
+    countries: List["CountryConfig"]
+) -> List["CountryConfig"]:
+    """
+    Get all countries that a scholarship matches.
+    
+    A scholarship may match multiple countries if it contains
+    keywords or domain patterns from multiple countries.
+    
+    Args:
+        scholarship: Dictionary with 'title' and 'url' keys.
+        countries: List of CountryConfig objects to check against.
+        
+    Returns:
+        List of matching CountryConfig objects.
+    """
+    return [
+        country for country in countries
+        if is_country_relevant(scholarship, country)
+    ]
+
+
+def filter_scholarships_by_country(
+    scholarships: List[Dict[str, str]],
+    country: "CountryConfig",
+    require_tech: bool = True,
+    exclude_false_positives: bool = True
+) -> List[Dict[str, str]]:
+    """
+    Filter scholarships for a specific country.
+    
+    Args:
+        scholarships: List of scholarship dictionaries.
+        country: CountryConfig object defining country criteria.
+        require_tech: If True, also require tech relevance.
+        exclude_false_positives: If True, exclude false positives.
+        
+    Returns:
+        List of scholarships matching the country criteria.
+    """
+    if not scholarships:
+        return []
+    
+    filtered = []
+    
+    for scholarship in scholarships:
+        if exclude_false_positives and is_likely_false_positive(scholarship):
+            continue
+        
+        if not is_country_relevant(scholarship, country):
+            continue
+        
+        if require_tech and not is_tech_relevant(scholarship):
+            continue
+        
+        filtered.append(scholarship)
+    
+    logger.debug(
+        f"Country filter [{country.code}]: {len(filtered)}/{len(scholarships)} passed"
+    )
+    
+    return filtered
+
+
+def filter_scholarships_multi_country(
+    scholarships: List[Dict[str, str]],
+    countries: Optional[List["CountryConfig"]] = None,
+    require_tech: bool = True,
+    exclude_false_positives: bool = True
+) -> Dict[str, List[Dict[str, str]]]:
+    """
+    Filter scholarships and group by country.
+    
+    Each scholarship is assigned to all matching countries.
+    A scholarship may appear under multiple countries if it matches
+    multiple country criteria.
+    
+    Args:
+        scholarships: List of scholarship dictionaries.
+        countries: List of CountryConfig objects. If None, loads from config.
+        require_tech: If True, also require tech relevance.
+        exclude_false_positives: If True, exclude false positives.
+        
+    Returns:
+        Dictionary mapping country codes to lists of scholarships.
+    """
+    if countries is None:
+        countries = load_countries_config(enabled_only=True)
+    
+    if not scholarships:
+        return {country.code: [] for country in countries}
+    
+    logger.info(
+        f"Multi-country filtering {len(scholarships)} scholarship(s) "
+        f"for {len(countries)} countries"
+    )
+    
+    results: Dict[str, List[Dict[str, str]]] = {
+        country.code: [] for country in countries
+    }
+    
+    stats = {
+        "total": len(scholarships),
+        "false_positives": 0,
+        "not_tech": 0,
+        "no_country": 0,
+        "matched": 0
+    }
+    
+    for scholarship in scholarships:
+        if exclude_false_positives and is_likely_false_positive(scholarship):
+            stats["false_positives"] += 1
+            continue
+        
+        if require_tech and not is_tech_relevant(scholarship):
+            stats["not_tech"] += 1
+            continue
+        
+        matching_countries = get_matching_countries(scholarship, countries)
+        
+        if not matching_countries:
+            stats["no_country"] += 1
+            continue
+        
+        stats["matched"] += 1
+        
+        for country in matching_countries:
+            # Add country info to scholarship
+            enriched = scholarship.copy()
+            enriched["country_code"] = country.code
+            enriched["country_name"] = country.name
+            results[country.code].append(enriched)
+    
+    # Log summary
+    country_counts = {code: len(schols) for code, schols in results.items() if schols}
+    logger.info(
+        f"Multi-country filter results: {stats['matched']}/{stats['total']} matched, "
+        f"by country: {country_counts}"
+    )
+    logger.debug(
+        f"Filter stats: false_positives={stats['false_positives']}, "
+        f"not_tech={stats['not_tech']}, no_country={stats['no_country']}"
+    )
+    
+    return results
+
+
+def get_all_filtered_scholarships(
+    scholarships_by_country: Dict[str, List[Dict[str, str]]]
+) -> List[Dict[str, str]]:
+    """
+    Flatten country-grouped scholarships into a single deduplicated list.
+    
+    Args:
+        scholarships_by_country: Dictionary mapping country codes to scholarship lists.
+        
+    Returns:
+        Deduplicated list of all scholarships.
+    """
+    seen_urls: Set[str] = set()
+    all_scholarships: List[Dict[str, str]] = []
+    
+    for scholarships in scholarships_by_country.values():
+        for scholarship in scholarships:
+            url = scholarship.get("url", "")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                all_scholarships.append(scholarship)
+    
+    return all_scholarships
+
+
+def count_scholarships_by_country(
+    scholarships_by_country: Dict[str, List[Dict[str, str]]]
+) -> Dict[str, int]:
+    """
+    Get scholarship counts by country.
+    
+    Args:
+        scholarships_by_country: Dictionary mapping country codes to scholarship lists.
+        
+    Returns:
+        Dictionary mapping country codes to counts.
+    """
+    return {code: len(schols) for code, schols in scholarships_by_country.items()}

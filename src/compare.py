@@ -3,11 +3,15 @@ Compare module for the Scholarship Watcher pipeline.
 
 This module handles comparing current scholarships with previous results
 to detect new entries, and safely persisting updated results.
+
+Supports both single-country (legacy) and multi-country modes:
+- Legacy mode: flat list of scholarships
+- Multi-country mode: scholarships grouped by country code
 """
 
 import os
 from datetime import datetime
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from src.utils import get_logger, safe_read_json, safe_write_json
 
@@ -292,4 +296,263 @@ def get_comparison_summary(
         "new_count": len(new),
         "removed_count": len(removed),
         "unchanged_count": len(unchanged)
+    }
+
+
+# =============================================================================
+# Multi-Country Comparison Functions
+# =============================================================================
+
+
+def load_previous_results_multi_country(
+    filepath: str = DEFAULT_RESULTS_PATH
+) -> Dict[str, List[Dict[str, str]]]:
+    """
+    Load previous scholarship results grouped by country.
+    
+    Handles both legacy (flat list) and multi-country (grouped) formats.
+    Legacy format is migrated to multi-country format with "NO" (Norway) as default.
+    
+    Args:
+        filepath: Path to the JSON file containing previous results.
+        
+    Returns:
+        Dictionary mapping country codes to lists of scholarships.
+    """
+    logger.debug(f"Loading previous results (multi-country) from {filepath}")
+    
+    data = safe_read_json(filepath, default={})
+    
+    # Handle empty or None data
+    if not data:
+        logger.info("No previous results found, starting fresh")
+        return {}
+    
+    # Check if already in multi-country format
+    if isinstance(data, dict) and "scholarships_by_country" in data:
+        scholarships_by_country = data.get("scholarships_by_country", {})
+        if isinstance(scholarships_by_country, dict):
+            total = sum(len(v) for v in scholarships_by_country.values())
+            logger.info(
+                f"Loaded {total} previous scholarship(s) "
+                f"across {len(scholarships_by_country)} countries"
+            )
+            return scholarships_by_country
+    
+    # Handle legacy format (flat list or dict with 'scholarships' key)
+    legacy_scholarships = _extract_legacy_scholarships(data)
+    
+    if legacy_scholarships:
+        logger.info(
+            f"Migrating {len(legacy_scholarships)} legacy scholarships to multi-country format"
+        )
+        # Migrate legacy scholarships to Norway by default
+        return {"NO": legacy_scholarships}
+    
+    return {}
+
+
+def _extract_legacy_scholarships(data: Any) -> List[Dict[str, str]]:
+    """
+    Extract scholarships from legacy data format.
+    
+    Args:
+        data: Raw data from JSON file.
+        
+    Returns:
+        List of scholarship dictionaries.
+    """
+    if isinstance(data, list):
+        return data
+    
+    if isinstance(data, dict):
+        scholarships = data.get("scholarships", [])
+        if isinstance(scholarships, list):
+            return scholarships
+    
+    return []
+
+
+def save_results_multi_country(
+    scholarships_by_country: Dict[str, List[Dict[str, str]]],
+    filepath: str = DEFAULT_RESULTS_PATH,
+    include_metadata: bool = True
+) -> bool:
+    """
+    Save scholarship results grouped by country using atomic write.
+    
+    Args:
+        scholarships_by_country: Dictionary mapping country codes to scholarship lists.
+        filepath: Path to the JSON file for storing results.
+        include_metadata: If True, include timestamp and count metadata.
+        
+    Returns:
+        True if save was successful, False otherwise.
+    """
+    total_count = sum(len(v) for v in scholarships_by_country.values())
+    logger.debug(
+        f"Saving {total_count} scholarship(s) across "
+        f"{len(scholarships_by_country)} countries to {filepath}"
+    )
+    
+    if include_metadata:
+        data = {
+            "last_updated": datetime.utcnow().isoformat() + "Z",
+            "total_count": total_count,
+            "country_counts": {
+                code: len(schols) 
+                for code, schols in scholarships_by_country.items()
+            },
+            "scholarships_by_country": scholarships_by_country
+        }
+    else:
+        data = {"scholarships_by_country": scholarships_by_country}
+    
+    success = safe_write_json(filepath, data)
+    
+    if success:
+        logger.info(
+            f"Successfully saved {total_count} scholarship(s) "
+            f"across {len(scholarships_by_country)} countries"
+        )
+    else:
+        logger.error(f"Failed to save multi-country results to {filepath}")
+    
+    return success
+
+
+def find_new_scholarships_by_country(
+    current_by_country: Dict[str, List[Dict[str, str]]],
+    previous_by_country: Dict[str, List[Dict[str, str]]]
+) -> Dict[str, List[Dict[str, str]]]:
+    """
+    Find new scholarships for each country.
+    
+    Args:
+        current_by_country: Current scholarships grouped by country.
+        previous_by_country: Previous scholarships grouped by country.
+        
+    Returns:
+        Dictionary mapping country codes to lists of new scholarships.
+    """
+    new_by_country: Dict[str, List[Dict[str, str]]] = {}
+    
+    # Get all country codes from both current and previous
+    all_countries = set(current_by_country.keys()) | set(previous_by_country.keys())
+    
+    for country_code in all_countries:
+        current = current_by_country.get(country_code, [])
+        previous = previous_by_country.get(country_code, [])
+        
+        new_scholarships = find_new_scholarships(current, previous)
+        
+        if new_scholarships:
+            new_by_country[country_code] = new_scholarships
+            logger.debug(
+                f"Found {len(new_scholarships)} new scholarship(s) for {country_code}"
+            )
+    
+    total_new = sum(len(v) for v in new_by_country.values())
+    logger.info(
+        f"Found {total_new} total new scholarship(s) "
+        f"across {len(new_by_country)} countries"
+    )
+    
+    return new_by_country
+
+
+def compare_and_update_multi_country(
+    current_by_country: Dict[str, List[Dict[str, str]]],
+    results_filepath: str = DEFAULT_RESULTS_PATH,
+    save_updated: bool = True
+) -> Tuple[Dict[str, List[Dict[str, str]]], Dict[str, List[Dict[str, str]]]]:
+    """
+    Compare current scholarships with previous results by country.
+    
+    This is the main comparison function for multi-country mode that:
+    1. Loads previous results (handles legacy migration)
+    2. Finds new scholarships per country
+    3. Optionally saves updated results
+    
+    Args:
+        current_by_country: Current scholarships grouped by country.
+        results_filepath: Path to the results JSON file.
+        save_updated: If True, save the updated results to file.
+        
+    Returns:
+        Tuple of (new_by_country, all_current_by_country).
+    """
+    logger.info("Starting multi-country scholarship comparison")
+    
+    # Load previous results
+    previous_by_country = load_previous_results_multi_country(results_filepath)
+    
+    # Find new scholarships
+    new_by_country = find_new_scholarships_by_country(
+        current_by_country, previous_by_country
+    )
+    
+    # Merge current with previous for each country (deduplicate)
+    merged_by_country: Dict[str, List[Dict[str, str]]] = {}
+    
+    for country_code in set(current_by_country.keys()) | set(previous_by_country.keys()):
+        current = current_by_country.get(country_code, [])
+        merged = merge_scholarships(current, [], keep_removed=False)
+        if merged:
+            merged_by_country[country_code] = merged
+    
+    # Log comparison summary
+    total_current = sum(len(v) for v in merged_by_country.values())
+    total_previous = sum(len(v) for v in previous_by_country.values())
+    total_new = sum(len(v) for v in new_by_country.values())
+    
+    logger.info(
+        f"Multi-country comparison complete: "
+        f"{total_current} current, {total_previous} previous, {total_new} new"
+    )
+    
+    # Save updated results if requested
+    if save_updated and merged_by_country:
+        save_results_multi_country(merged_by_country, results_filepath)
+    
+    return new_by_country, merged_by_country
+
+
+def get_comparison_summary_multi_country(
+    current_by_country: Dict[str, List[Dict[str, str]]],
+    previous_by_country: Dict[str, List[Dict[str, str]]]
+) -> Dict[str, Any]:
+    """
+    Get a summary of the multi-country comparison.
+    
+    Args:
+        current_by_country: Current scholarships by country.
+        previous_by_country: Previous scholarships by country.
+        
+    Returns:
+        Dictionary with comparison statistics by country and totals.
+    """
+    new_by_country = find_new_scholarships_by_country(
+        current_by_country, previous_by_country
+    )
+    
+    by_country: Dict[str, Dict[str, int]] = {}
+    all_countries = set(current_by_country.keys()) | set(previous_by_country.keys())
+    
+    for country_code in all_countries:
+        current = current_by_country.get(country_code, [])
+        previous = previous_by_country.get(country_code, [])
+        new = new_by_country.get(country_code, [])
+        
+        by_country[country_code] = {
+            "current": len(current),
+            "previous": len(previous),
+            "new": len(new)
+        }
+    
+    return {
+        "by_country": by_country,
+        "total_current": sum(len(v) for v in current_by_country.values()),
+        "total_previous": sum(len(v) for v in previous_by_country.values()),
+        "total_new": sum(len(v) for v in new_by_country.values())
     }

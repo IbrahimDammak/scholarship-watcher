@@ -4,6 +4,7 @@ Utility functions for the Scholarship Watcher pipeline.
 This module provides:
 - Central logging configuration
 - Safe JSON read/write helpers
+- Country configuration loading and validation
 - Shared helper utilities used across modules
 """
 
@@ -14,7 +15,204 @@ import sys
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Set
+
+
+# Default configuration paths
+DEFAULT_CONFIG_PATH = "config/countries.json"
+
+
+class CountryConfig:
+    """Represents a country configuration for scholarship filtering."""
+    
+    def __init__(
+        self,
+        code: str,
+        name: str,
+        keywords: List[str],
+        enabled: bool = True,
+        domain_patterns: Optional[List[str]] = None
+    ):
+        self.code = code.upper()
+        self.name = name
+        self.keywords = set(kw.lower() for kw in keywords)
+        self.enabled = enabled
+        self.domain_patterns = set(dp.lower() for dp in (domain_patterns or []))
+    
+    def __repr__(self) -> str:
+        return f"CountryConfig(code={self.code}, name={self.name}, enabled={self.enabled})"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary representation."""
+        return {
+            "code": self.code,
+            "name": self.name,
+            "keywords": sorted(self.keywords),
+            "enabled": self.enabled,
+            "domain_patterns": sorted(self.domain_patterns)
+        }
+
+
+def load_countries_config(
+    config_path: Optional[str] = None,
+    enabled_only: bool = True
+) -> List[CountryConfig]:
+    """
+    Load country configurations from JSON file or environment.
+    
+    Priority:
+    1. COUNTRIES_CONFIG environment variable (JSON string)
+    2. COUNTRIES_CONFIG_PATH environment variable (file path)
+    3. Provided config_path parameter
+    4. Default config file path
+    
+    Args:
+        config_path: Optional path to the configuration file.
+        enabled_only: If True, only return enabled countries.
+        
+    Returns:
+        List of CountryConfig objects.
+    """
+    logger = get_logger("utils")
+    countries: List[CountryConfig] = []
+    global_keywords: Set[str] = set()
+    
+    # Check for JSON config in environment variable
+    env_config = os.environ.get("COUNTRIES_CONFIG", "").strip()
+    if env_config:
+        try:
+            data = json.loads(env_config)
+            logger.info("Loaded country config from COUNTRIES_CONFIG environment variable")
+        except json.JSONDecodeError as e:
+            logger.warning(f"Invalid JSON in COUNTRIES_CONFIG: {e}")
+            data = None
+    else:
+        data = None
+    
+    # If not in env, try file path
+    if data is None:
+        env_path = os.environ.get("COUNTRIES_CONFIG_PATH", "").strip()
+        file_path = env_path or config_path or DEFAULT_CONFIG_PATH
+        
+        data = safe_read_json(file_path, default=None)
+        if data is not None:
+            logger.info(f"Loaded country config from {file_path}")
+        else:
+            logger.warning(f"Could not load country config from {file_path}")
+    
+    # Parse configuration
+    if data is not None and isinstance(data, dict):
+        # Extract global keywords
+        global_keywords = set(
+            kw.lower() for kw in data.get("global_keywords", [])
+        )
+        
+        # Parse country entries
+        for entry in data.get("countries", []):
+            try:
+                country = _parse_country_entry(entry)
+                if country is not None:
+                    if not enabled_only or country.enabled:
+                        # Add global keywords to each country
+                        country.keywords.update(global_keywords)
+                        countries.append(country)
+                        logger.debug(f"Loaded country: {country}")
+            except Exception as e:
+                logger.warning(f"Skipping invalid country entry: {e}")
+    
+    # Fallback to default Norway config if no countries loaded
+    if not countries:
+        logger.warning("No countries configured, using default Norway configuration")
+        countries = [_get_default_norway_config()]
+    
+    logger.info(f"Loaded {len(countries)} country configuration(s): {[c.code for c in countries]}")
+    return countries
+
+
+def _parse_country_entry(entry: Dict[str, Any]) -> Optional[CountryConfig]:
+    """
+    Parse a single country entry from configuration.
+    
+    Args:
+        entry: Dictionary with country configuration.
+        
+    Returns:
+        CountryConfig object or None if invalid.
+    """
+    if not isinstance(entry, dict):
+        return None
+    
+    code = entry.get("code", "").strip()
+    name = entry.get("name", "").strip()
+    
+    if not code or not name:
+        return None
+    
+    keywords = entry.get("keywords", [])
+    if not isinstance(keywords, list):
+        keywords = []
+    
+    enabled = entry.get("enabled", True)
+    if not isinstance(enabled, bool):
+        enabled = str(enabled).lower() in ("true", "1", "yes")
+    
+    domain_patterns = entry.get("domain_patterns", [])
+    if not isinstance(domain_patterns, list):
+        domain_patterns = []
+    
+    return CountryConfig(
+        code=code,
+        name=name,
+        keywords=keywords,
+        enabled=enabled,
+        domain_patterns=domain_patterns
+    )
+
+
+def _get_default_norway_config() -> CountryConfig:
+    """Get default Norway configuration as fallback."""
+    return CountryConfig(
+        code="NO",
+        name="Norway",
+        keywords=[
+            "norway", "norwegian", "norge", "norsk",
+            "oslo", "bergen", "trondheim", "stavanger",
+            "tromsø", "tromso", "ntnu", "uio", "uib",
+            "nordic", "scandinavia", "scandinavian"
+        ],
+        enabled=True,
+        domain_patterns=[".no"]
+    )
+
+
+def validate_countries_config(countries: List[CountryConfig]) -> List[str]:
+    """
+    Validate country configurations and return any warnings.
+    
+    Args:
+        countries: List of CountryConfig objects to validate.
+        
+    Returns:
+        List of warning messages (empty if all valid).
+    """
+    warnings = []
+    seen_codes: Set[str] = set()
+    
+    for country in countries:
+        # Check for duplicate codes
+        if country.code in seen_codes:
+            warnings.append(f"Duplicate country code: {country.code}")
+        seen_codes.add(country.code)
+        
+        # Check for empty keywords
+        if not country.keywords:
+            warnings.append(f"Country {country.code} has no keywords")
+        
+        # Check code format (should be 2-letter ISO)
+        if len(country.code) != 2:
+            warnings.append(f"Country code '{country.code}' is not ISO-2 format")
+    
+    return warnings
 
 
 def setup_logging(level: str = "INFO") -> logging.Logger:
