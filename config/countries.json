@@ -4,113 +4,218 @@
       "code": "NO",
       "name": "Norway",
       "enabled": true,
-      "keywords": [
-        "norway",
-        "norwegian",
-        "norge",
-        "norsk",
-        "oslo",
-        "bergen",
-        "trondheim",
-        "stavanger",
-        "tromsø",
-        "tromso",
-        "ntnu",
-        "uio",
-        "uib"
-      ],
+      "keywords": ["norway", "norwegian", "norge", "norsk", "oslo", "bergen", "trondheim", "stavanger", "tromsø", "tromso", "ntnu", "uio", "uib"],
       "domain_patterns": [".no"]
     },
     {
       "code": "SE",
       "name": "Sweden",
       "enabled": true,
-      "keywords": [
-        "sweden",
-        "swedish",
-        "sverige",
-        "svenska",
-        "stockholm",
-        "gothenburg",
-        "malmö",
-        "malmo",
-        "uppsala",
-        "kth",
-        "chalmers"
-      ],
+      "keywords": ["sweden", "swedish", "sverige", "svenska", "stockholm", "gothenburg", "malmö", "malmo", "uppsala", "kth", "chalmers"],
       "domain_patterns": [".se"]
     },
     {
       "code": "DE",
       "name": "Germany",
       "enabled": true,
-      "keywords": [
-        "germany",
-        "german",
-        "deutschland",
-        "deutsch",
-        "berlin",
-        "munich",
-        "münchen",
-        "frankfurt",
-        "hamburg",
-        "daad",
-        "tu munich",
-        "tu berlin"
-      ],
+      "keywords": ["germany", "german", "deutschland", "deutsch", "berlin", "munich", "münchen", "frankfurt", "hamburg", "daad", "tu munich", "tu berlin"],
       "domain_patterns": [".de"]
     },
     {
       "code": "NL",
       "name": "Netherlands",
       "enabled": true,
-      "keywords": [
-        "netherlands",
-        "dutch",
-        "holland",
-        "amsterdam",
-        "rotterdam",
-        "delft",
-        "eindhoven",
-        "tu delft"
-      ],
+      "keywords": ["netherlands", "dutch", "holland", "amsterdam", "rotterdam", "delft", "eindhoven", "tu delft", "leiden"],
       "domain_patterns": [".nl"]
     },
     {
       "code": "DK",
       "name": "Denmark",
       "enabled": true,
-      "keywords": [
-        "denmark",
-        "danish",
-        "danmark",
-        "dansk",
-        "copenhagen",
-        "aarhus",
-        "dtu"
-      ],
+      "keywords": ["denmark", "danish", "danmark", "dansk", "copenhagen", "aarhus", "dtu"],
       "domain_patterns": [".dk"]
     },
     {
       "code": "FI",
       "name": "Finland",
       "enabled": true,
-      "keywords": [
-        "finland",
-        "finnish",
-        "suomi",
-        "helsinki",
-        "aalto",
-        "tampere"
-      ],
+      "keywords": ["finland", "finnish", "suomi", "helsinki", "aalto", "tampere", "turku"],
       "domain_patterns": [".fi"]
+    },
+    {
+      "code": "FR",
+      "name": "France",
+      "enabled": true,
+      "keywords": ["france", "french", "français", "paris", "lyon", "marseille", "toulouse", "sorbonne", "polytechnique", "eiffel"],
+      "domain_patterns": [".fr"]
+    },
+    {
+      "code": "BE",
+      "name": "Belgium",
+      "enabled": true,
+      "keywords": ["belgium", "belgian", "belgique", "belgie", "brussels", "bruxelles", "leuven", "ghent", "ku leuven"],
+      "domain_patterns": [".be"]
+    },
+    {
+      "code": "AT",
+      "name": "Austria",
+      "enabled": true,
+      "keywords": ["austria", "austrian", "österreich", "vienna", "wien", "salzburg", "graz", "tu wien"],
+      "domain_patterns": [".at"]
+    },
+    {
+      "code": "CH",
+      "name": "Switzerland",
+      "enabled": true,
+      "keywords": ["switzerland", "swiss", "schweiz", "suisse", "zurich", "zürich", "geneva", "genève", "eth zurich", "epfl", "bern"],
+      "domain_patterns": [".ch"]
+    },
+    {
+      "code": "IT",
+      "name": "Italy",
+      "enabled": true,
+      "keywords": ["italy", "italian", "italia", "italiano", "rome", "roma", "milan", "milano", "turin", "torino", "bologna", "politecnico"],
+      "domain_patterns": [".it"]
+    },
+    {
+      "code": "ES",
+      "name": "Spain",
+      "enabled": true,
+      "keywords": ["spain", "spanish", "españa", "español", "madrid", "barcelona", "valencia", "seville"],
+      "domain_patterns": [".es"]
+    },
+    {
+      "code": "PT",
+      "name": "Portugal",
+      "enabled": true,
+      "keywords": ["portugal", "portuguese", "português", "lisbon", "lisboa", "porto"],
+      "domain_patterns": [".pt"]
+    },
+    {
+      "code": "IE",
+      "name": "Ireland",
+      "enabled": true,
+      "keywords": ["ireland", "irish", "dublin", "cork", "galway", "trinity college"],
+      "domain_patterns": [".ie"]
+    },
+    {
+      "code": "PL",
+      "name": "Poland",
+      "enabled": true,
+      "keywords": ["poland", "polish", "polska", "warsaw", "warszawa", "krakow", "kraków", "wroclaw"],
+      "domain_patterns": [".pl"]
+    },
+    {
+      "code": "CZ",
+      "name": "Czech Republic",
+      "enabled": true,
+      "keywords": ["czech", "czechia", "česko", "prague", "praha", "brno"],
+      "domain_patterns": [".cz"]
+    },
+    {
+      "code": "HU",
+      "name": "Hungary",
+      "enabled": true,
+      "keywords": ["hungary", "hungarian", "magyarország", "budapest", "stipendium hungaricum"],
+      "domain_patterns": [".hu"]
+    },
+    {
+      "code": "SK",
+      "name": "Slovakia",
+      "enabled": true,
+      "keywords": ["slovakia", "slovak", "slovensko", "bratislava"],
+      "domain_patterns": [".sk"]
+    },
+    {
+      "code": "SI",
+      "name": "Slovenia",
+      "enabled": true,
+      "keywords": ["slovenia", "slovenian", "slovenija", "ljubljana"],
+      "domain_patterns": [".si"]
+    },
+    {
+      "code": "EE",
+      "name": "Estonia",
+      "enabled": true,
+      "keywords": ["estonia", "estonian", "eesti", "tallinn", "tartu"],
+      "domain_patterns": [".ee"]
+    },
+    {
+      "code": "LV",
+      "name": "Latvia",
+      "enabled": true,
+      "keywords": ["latvia", "latvian", "latvija", "riga"],
+      "domain_patterns": [".lv"]
+    },
+    {
+      "code": "LT",
+      "name": "Lithuania",
+      "enabled": true,
+      "keywords": ["lithuania", "lithuanian", "lietuva", "vilnius", "kaunas"],
+      "domain_patterns": [".lt"]
+    },
+    {
+      "code": "RO",
+      "name": "Romania",
+      "enabled": true,
+      "keywords": ["romania", "romanian", "românia", "bucharest", "bucurești", "cluj"],
+      "domain_patterns": [".ro"]
+    },
+    {
+      "code": "BG",
+      "name": "Bulgaria",
+      "enabled": true,
+      "keywords": ["bulgaria", "bulgarian", "българия", "sofia"],
+      "domain_patterns": [".bg"]
+    },
+    {
+      "code": "HR",
+      "name": "Croatia",
+      "enabled": true,
+      "keywords": ["croatia", "croatian", "hrvatska", "zagreb"],
+      "domain_patterns": [".hr"]
+    },
+    {
+      "code": "GR",
+      "name": "Greece",
+      "enabled": true,
+      "keywords": ["greece", "greek", "ελλάδα", "athens", "thessaloniki"],
+      "domain_patterns": [".gr"]
+    },
+    {
+      "code": "CY",
+      "name": "Cyprus",
+      "enabled": true,
+      "keywords": ["cyprus", "cypriot", "κύπρος", "nicosia", "limassol"],
+      "domain_patterns": [".cy"]
+    },
+    {
+      "code": "MT",
+      "name": "Malta",
+      "enabled": true,
+      "keywords": ["malta", "maltese", "valletta"],
+      "domain_patterns": [".mt"]
+    },
+    {
+      "code": "LU",
+      "name": "Luxembourg",
+      "enabled": true,
+      "keywords": ["luxembourg", "luxembourgish", "lëtzebuerg"],
+      "domain_patterns": [".lu"]
+    },
+    {
+      "code": "EU",
+      "name": "European Union",
+      "enabled": true,
+      "keywords": ["european union", "eu scholarship", "erasmus", "erasmus+", "horizon", "marie curie", "marie sklodowska", "erc grant", "european research council"],
+      "domain_patterns": [".eu", ".europa.eu"]
     }
   ],
   "global_keywords": [
     "nordic",
     "scandinavia",
     "scandinavian",
-    "european union",
-    "eu scholarship"
+    "european",
+    "europe"
   ]
 }

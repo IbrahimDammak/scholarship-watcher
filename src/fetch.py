@@ -29,12 +29,104 @@ DEFAULT_USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
-# Default scholarship source URLs (Norway, Cloud, IT, Computer Science focus)
+# Default scholarship source URLs (EU countries - Cloud, IT, Computer Science focus)
 DEFAULT_SCHOLARSHIP_URLS = [
+    # === NORDIC COUNTRIES ===
+    # Norway
     "https://www.scholarshipportal.com/scholarships/norway",
     "https://www.studyinnorway.no/scholarships",
     "https://www.scholars4dev.com/tag/norway-scholarships/",
-    "https://www.afterschoolafrica.com/tag/norway-scholarships/",
+    # Sweden
+    "https://www.scholarshipportal.com/scholarships/sweden",
+    "https://studyinsweden.se/scholarships/",
+    "https://www.scholars4dev.com/tag/sweden-scholarships/",
+    # Denmark
+    "https://www.scholarshipportal.com/scholarships/denmark",
+    "https://studyindenmark.dk/study-options/tuition-fees-and-scholarships",
+    # Finland
+    "https://www.scholarshipportal.com/scholarships/finland",
+    "https://www.studyinfinland.fi/scholarships",
+    
+    # === WESTERN EUROPE ===
+    # Germany
+    "https://www.scholarshipportal.com/scholarships/germany",
+    "https://www.daad.de/en/study-and-research-in-germany/scholarships/",
+    "https://www.scholars4dev.com/tag/germany-scholarships/",
+    # Netherlands
+    "https://www.scholarshipportal.com/scholarships/netherlands",
+    "https://www.studyinholland.nl/finances/scholarships",
+    "https://www.scholars4dev.com/tag/netherlands-scholarships/",
+    # Belgium
+    "https://www.scholarshipportal.com/scholarships/belgium",
+    "https://www.scholars4dev.com/tag/belgium-scholarships/",
+    # France
+    "https://www.scholarshipportal.com/scholarships/france",
+    "https://www.campusfrance.org/en/scholarships-masters",
+    "https://www.scholars4dev.com/tag/france-scholarships/",
+    # Luxembourg
+    "https://www.scholarshipportal.com/scholarships/luxembourg",
+    
+    # === SOUTHERN EUROPE ===
+    # Italy
+    "https://www.scholarshipportal.com/scholarships/italy",
+    "https://www.scholars4dev.com/tag/italy-scholarships/",
+    # Spain
+    "https://www.scholarshipportal.com/scholarships/spain",
+    "https://www.scholars4dev.com/tag/spain-scholarships/",
+    # Portugal
+    "https://www.scholarshipportal.com/scholarships/portugal",
+    "https://www.scholars4dev.com/tag/portugal-scholarships/",
+    # Greece
+    "https://www.scholarshipportal.com/scholarships/greece",
+    # Malta
+    "https://www.scholarshipportal.com/scholarships/malta",
+    # Cyprus
+    "https://www.scholarshipportal.com/scholarships/cyprus",
+    
+    # === CENTRAL EUROPE ===
+    # Austria
+    "https://www.scholarshipportal.com/scholarships/austria",
+    "https://www.scholars4dev.com/tag/austria-scholarships/",
+    # Switzerland (not EU but Schengen)
+    "https://www.scholarshipportal.com/scholarships/switzerland",
+    "https://www.scholars4dev.com/tag/switzerland-scholarships/",
+    # Poland
+    "https://www.scholarshipportal.com/scholarships/poland",
+    "https://www.scholars4dev.com/tag/poland-scholarships/",
+    # Czech Republic
+    "https://www.scholarshipportal.com/scholarships/czech-republic",
+    "https://www.scholars4dev.com/tag/czech-republic-scholarships/",
+    # Hungary
+    "https://www.scholarshipportal.com/scholarships/hungary",
+    "https://stipendiumhungaricum.hu/",
+    # Slovakia
+    "https://www.scholarshipportal.com/scholarships/slovakia",
+    # Slovenia
+    "https://www.scholarshipportal.com/scholarships/slovenia",
+    
+    # === EASTERN EUROPE ===
+    # Estonia
+    "https://www.scholarshipportal.com/scholarships/estonia",
+    "https://www.studyinestonia.ee/scholarships",
+    # Latvia
+    "https://www.scholarshipportal.com/scholarships/latvia",
+    # Lithuania
+    "https://www.scholarshipportal.com/scholarships/lithuania",
+    # Romania
+    "https://www.scholarshipportal.com/scholarships/romania",
+    # Bulgaria
+    "https://www.scholarshipportal.com/scholarships/bulgaria",
+    # Croatia
+    "https://www.scholarshipportal.com/scholarships/croatia",
+    
+    # === IRELAND ===
+    "https://www.scholarshipportal.com/scholarships/ireland",
+    "https://www.scholars4dev.com/tag/ireland-scholarships/",
+    
+    # === EU-WIDE PROGRAMS ===
+    "https://www.scholarshipportal.com/scholarships/europe",
+    "https://erasmus-plus.ec.europa.eu/opportunities/opportunities-for-individuals/students",
+    "https://marie-sklodowska-curie-actions.ec.europa.eu/",
 ]
 
 

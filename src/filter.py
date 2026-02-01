@@ -403,7 +403,7 @@ def is_country_relevant(
     Check if a scholarship is relevant to a specific country.
     
     Args:
-        scholarship: Dictionary with 'title' and 'url' keys.
+        scholarship: Dictionary with 'title', 'url', and optionally 'description' keys.
         country: CountryConfig object with keywords and domain patterns.
         
     Returns:
@@ -411,13 +411,16 @@ def is_country_relevant(
     """
     title = scholarship.get("title", "")
     url = scholarship.get("url", "").lower()
-    combined = f"{title} {url}"
+    description = scholarship.get("description", "")
+    
+    # Combine all text fields for keyword search
+    combined = f"{title} {url} {description}"
     
     # Check keywords
     if contains_any_keyword(combined, country.keywords):
         return True
     
-    # Check domain patterns
+    # Check domain patterns in URL
     for pattern in country.domain_patterns:
         if pattern in url:
             return True
