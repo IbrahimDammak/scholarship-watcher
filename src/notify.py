@@ -1268,3 +1268,177 @@ def check_email_connection() -> bool:
     except Exception as e:
         logger.warning(f"Email connection check failed: {e}")
         return False
+
+
+def send_personalized_email_to_subscriber(
+    subscriber_email: str,
+    scholarships_by_country: Dict[str, List[Dict[str, str]]],
+    subscriber_countries: List[str],
+    country_names: Dict[str, str],
+    dry_run: bool = False
+) -> bool:
+    """
+    Send personalized email to a single subscriber with only their selected countries.
+    
+    Args:
+        subscriber_email: Email address of the subscriber.
+        scholarships_by_country: All scholarships grouped by country code.
+        subscriber_countries: Country codes the subscriber is interested in.
+        country_names: Mapping of country codes to names.
+        dry_run: If True, don't actually send the email.
+        
+    Returns:
+        True if email was sent successfully, False otherwise.
+    """
+    # Filter scholarships to only include subscriber's countries
+    filtered_scholarships = {
+        code: scholarships
+        for code, scholarships in scholarships_by_country.items()
+        if code in subscriber_countries and scholarships
+    }
+    
+    if not filtered_scholarships:
+        logger.debug(f"No relevant scholarships for {subscriber_email}")
+        return True
+    
+    total_count = sum(len(v) for v in filtered_scholarships.values())
+    logger.info(
+        f"Sending personalized email to {subscriber_email}: "
+        f"{total_count} scholarship(s) in {len(filtered_scholarships)} country/countries"
+    )
+    
+    try:
+        smtp_host, smtp_port, smtp_user, smtp_password, email_from, _ = get_email_credentials()
+        
+        # Build subject with country names
+        country_list = [country_names.get(c, c) for c in filtered_scholarships.keys()]
+        if len(country_list) <= 3:
+            countries_str = ", ".join(country_list)
+        else:
+            countries_str = f"{len(country_list)} countries"
+        
+        subject = f"🎓 New Scholarships in {countries_str}"
+        
+        html_body = format_email_body_html_multi_country(filtered_scholarships, country_names)
+        plain_body = format_email_body_plain_multi_country(filtered_scholarships, country_names)
+        
+        if dry_run:
+            logger.info(f"[DRY RUN] Would send to: {subscriber_email}")
+            logger.info(f"[DRY RUN] Subject: {subject}")
+            return True
+        
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = email_from
+        msg["To"] = subscriber_email
+        msg["Date"] = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
+        
+        msg.set_content(plain_body)
+        msg.add_alternative(html_body, subtype="html")
+        
+        ssl_context = ssl.create_default_context()
+        
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30, context=ssl_context) as server:
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+                server.starttls(context=ssl_context)
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+        
+        logger.info(f"Email sent successfully to {subscriber_email}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send email to {subscriber_email}: {e}")
+        return False
+
+
+def send_emails_to_subscribers(
+    subscribers: List,
+    scholarships_by_country: Dict[str, List[Dict[str, str]]],
+    country_names: Dict[str, str],
+    dry_run: bool = False
+) -> Dict[str, Any]:
+    """
+    Send personalized emails to all subscribers based on their country preferences.
+    
+    Each subscriber receives one email per run containing only scholarships
+    from countries they have subscribed to.
+    
+    Args:
+        subscribers: List of Subscriber objects (from src.subscribers).
+        scholarships_by_country: All new scholarships grouped by country code.
+        country_names: Mapping of country codes to names.
+        dry_run: If True, don't actually send emails.
+        
+    Returns:
+        Dictionary with results:
+        - sent: Number of emails sent successfully
+        - failed: Number of emails that failed
+        - skipped: Number of subscribers with no relevant scholarships
+        - details: List of per-subscriber results
+    """
+    if not is_email_configured():
+        logger.info("Email notifications not configured")
+        return {'sent': 0, 'failed': 0, 'skipped': 0, 'details': []}
+    
+    # Filter out empty countries
+    non_empty = {c: s for c, s in scholarships_by_country.items() if s}
+    
+    if not non_empty:
+        logger.info("No new scholarships to send to subscribers")
+        return {'sent': 0, 'failed': 0, 'skipped': len(subscribers), 'details': []}
+    
+    available_countries = set(non_empty.keys())
+    
+    results = {
+        'sent': 0,
+        'failed': 0,
+        'skipped': 0,
+        'details': []
+    }
+    
+    for subscriber in subscribers:
+        subscriber_countries = [c for c in subscriber.countries if c in available_countries]
+        
+        if not subscriber_countries:
+            results['skipped'] += 1
+            results['details'].append({
+                'email': subscriber.email,
+                'status': 'skipped',
+                'reason': 'no relevant countries'
+            })
+            continue
+        
+        success = send_personalized_email_to_subscriber(
+            subscriber_email=subscriber.email,
+            scholarships_by_country=non_empty,
+            subscriber_countries=subscriber_countries,
+            country_names=country_names,
+            dry_run=dry_run
+        )
+        
+        if success:
+            results['sent'] += 1
+            results['details'].append({
+                'email': subscriber.email,
+                'status': 'sent',
+                'countries': subscriber_countries
+            })
+        else:
+            results['failed'] += 1
+            results['details'].append({
+                'email': subscriber.email,
+                'status': 'failed',
+                'countries': subscriber_countries
+            })
+    
+    logger.info(
+        f"Subscriber email results: {results['sent']} sent, "
+        f"{results['failed']} failed, {results['skipped']} skipped"
+    )
+    
+    return results

@@ -43,8 +43,14 @@ from src.notify import (
     GitHubAPIError,
     send_email_notification,
     send_email_notification_multi_country,
+    send_emails_to_subscribers,
     check_email_connection,
     is_email_configured
+)
+from src.subscribers import (
+    load_subscribers,
+    get_subscriber_summary,
+    validate_subscribers
 )
 
 
@@ -440,16 +446,38 @@ def _run_multi_country_pipeline(
         
         # Send email notification (if configured)
         if is_email_configured():
-            logger.info("Sending email notification...")
-            email_sent = send_email_notification_multi_country(
-                new_by_country,
-                country_names=country_names,
-                dry_run=dry_run
-            )
-            if email_sent:
-                logger.info("Email notification sent successfully")
+            # First, send to subscribers (personalized per-user emails)
+            subscribers = load_subscribers(active_only=True)
+            
+            if subscribers:
+                logger.info(f"Sending personalized emails to {len(subscribers)} subscriber(s)...")
+                subscriber_results = send_emails_to_subscribers(
+                    subscribers=subscribers,
+                    scholarships_by_country=new_by_country,
+                    country_names=country_names,
+                    dry_run=dry_run
+                )
+                logger.info(
+                    f"Subscriber emails: {subscriber_results['sent']} sent, "
+                    f"{subscriber_results['failed']} failed, "
+                    f"{subscriber_results['skipped']} skipped"
+                )
             else:
-                logger.warning("Email notification failed (see logs above)")
+                logger.debug("No subscribers found, skipping personalized emails")
+            
+            # Also send to legacy EMAIL_TO if configured (admin notification)
+            email_to = os.environ.get("EMAIL_TO", "")
+            if email_to:
+                logger.info("Sending admin email notification...")
+                email_sent = send_email_notification_multi_country(
+                    new_by_country,
+                    country_names=country_names,
+                    dry_run=dry_run
+                )
+                if email_sent:
+                    logger.info("Admin email notification sent successfully")
+                else:
+                    logger.warning("Admin email notification failed (see logs above)")
         else:
             logger.debug("Email notifications not configured, skipping")
     else:
