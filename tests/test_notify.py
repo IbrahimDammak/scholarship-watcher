@@ -384,7 +384,7 @@ class TestSendEmailNotification:
                 mock_smtp.assert_not_called()
     
     def test_send_email_success(self, email_env_vars, sample_scholarships):
-        """Test successful email sending."""
+        """Test successful email sending with STARTTLS (port 587)."""
         with patch.dict(os.environ, email_env_vars, clear=False):
             mock_server = MagicMock()
             
@@ -395,6 +395,21 @@ class TestSendEmailNotification:
                 
                 assert result is True
                 mock_server.starttls.assert_called_once()
+                mock_server.login.assert_called_once_with("user@example.com", "securepassword123")
+                mock_server.send_message.assert_called_once()
+    
+    def test_send_email_success_port_465(self, email_env_vars, sample_scholarships):
+        """Test successful email sending with SSL (port 465)."""
+        email_env_vars["SMTP_PORT"] = "465"
+        with patch.dict(os.environ, email_env_vars, clear=False):
+            mock_server = MagicMock()
+            
+            with patch("src.notify.smtplib.SMTP_SSL") as mock_smtp_ssl:
+                mock_smtp_ssl.return_value.__enter__.return_value = mock_server
+                
+                result = send_email_notification(sample_scholarships)
+                
+                assert result is True
                 mock_server.login.assert_called_once_with("user@example.com", "securepassword123")
                 mock_server.send_message.assert_called_once()
     

@@ -602,6 +602,10 @@ def send_email_notification(
     """
     Send an email notification about new scholarships via SMTP with TLS.
     
+    Supports both:
+    - Port 465: SMTP_SSL (implicit TLS)
+    - Port 587: SMTP with STARTTLS (explicit TLS)
+    
     Args:
         scholarships: List of new scholarship dictionaries.
         dry_run: If True, don't actually send the email, just log.
@@ -627,6 +631,8 @@ def send_email_notification(
     try:
         # Get credentials
         smtp_host, smtp_port, smtp_user, smtp_password, email_from, email_to = get_email_credentials()
+        
+        logger.info(f"Email config: host={smtp_host}, port={smtp_port}, from={email_from}, to={email_to}")
         
         # Format email content
         date_str = datetime.utcnow().strftime("%Y-%m-%d")
@@ -657,18 +663,27 @@ def send_email_notification(
         # Create SSL context for TLS
         ssl_context = ssl.create_default_context()
         
-        # Send email via SMTP with STARTTLS
-        logger.debug(f"Connecting to SMTP server: {smtp_host}:{smtp_port}")
+        # Send email - use different method based on port
+        logger.info(f"Connecting to SMTP server: {smtp_host}:{smtp_port}")
         
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
-            # Enable TLS encryption
-            server.starttls(context=ssl_context)
-            
-            # Authenticate
-            server.login(smtp_user, smtp_password)
-            
-            # Send email
-            server.send_message(msg)
+        if smtp_port == 465:
+            # Port 465 uses implicit SSL (SMTP_SSL)
+            logger.debug("Using SMTP_SSL (implicit TLS) for port 465")
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30, context=ssl_context) as server:
+                logger.debug("SSL connection established, authenticating...")
+                server.login(smtp_user, smtp_password)
+                logger.debug("Authentication successful, sending message...")
+                server.send_message(msg)
+        else:
+            # Port 587 (and others) use STARTTLS
+            logger.debug(f"Using SMTP with STARTTLS for port {smtp_port}")
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+                logger.debug("Connection established, starting TLS...")
+                server.starttls(context=ssl_context)
+                logger.debug("TLS established, authenticating...")
+                server.login(smtp_user, smtp_password)
+                logger.debug("Authentication successful, sending message...")
+                server.send_message(msg)
         
         logger.info(f"Email notification sent successfully to {email_to}")
         return True
@@ -718,9 +733,17 @@ def check_email_connection() -> bool:
         
         ssl_context = ssl.create_default_context()
         
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-            server.starttls(context=ssl_context)
-            server.login(smtp_user, smtp_password)
+        logger.debug(f"Testing email connection to {smtp_host}:{smtp_port}")
+        
+        if smtp_port == 465:
+            # Port 465 uses implicit SSL
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10, context=ssl_context) as server:
+                server.login(smtp_user, smtp_password)
+        else:
+            # Port 587 and others use STARTTLS
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+                server.starttls(context=ssl_context)
+                server.login(smtp_user, smtp_password)
         
         logger.debug(f"Email connection OK, authenticated with {smtp_user}")
         return True
