@@ -24,8 +24,6 @@
         emailError: document.getElementById('email-error'),
         countriesContainer: document.getElementById('countries-container'),
         countriesError: document.getElementById('countries-error'),
-        countriesData: document.getElementById('countries-data'),
-        timestamp: document.getElementById('timestamp'),
         submitBtn: document.getElementById('submit-btn'),
         btnText: document.querySelector('.btn-text'),
         btnLoading: document.querySelector('.btn-loading'),
@@ -157,6 +155,14 @@
     async function handleSubmit(event) {
         event.preventDefault();
 
+        // Check honeypot (spam protection)
+        const botField = document.getElementById('bot-field');
+        if (botField && botField.value) {
+            // Silently reject spam submissions
+            showSuccess();
+            return;
+        }
+
         // Validate form
         const isEmailValid = validateEmail();
         const isCountriesValid = validateCountries();
@@ -167,26 +173,30 @@
 
         // Prepare data
         const selectedCountries = getSelectedCountries();
-        elements.countriesData.value = JSON.stringify(selectedCountries);
-        elements.timestamp.value = new Date().toISOString();
 
         // Show loading state
         setSubmitLoading(true);
 
         try {
-            // Submit to Netlify Forms
-            const formData = new FormData(elements.form);
+            // Submit to Netlify Function
+            const payload = {
+                email: elements.emailInput.value.trim(),
+                countries: selectedCountries,
+                created_at: new Date().toISOString()
+            };
             
-            const response = await fetch('/', {
+            const response = await fetch('/.netlify/functions/subscribe', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams(formData).toString()
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
+
+            const result = await response.json().catch(() => ({}));
 
             if (response.ok) {
                 showSuccess();
             } else {
-                throw new Error(`Submission failed: ${response.status}`);
+                throw new Error(result.error || `Submission failed: ${response.status}`);
             }
         } catch (error) {
             console.error('Submission error:', error);

@@ -14,10 +14,10 @@
             <p class="subtitle">Get notified about new Cloud, IT &amp; CS scholarships in Europe</p>
         </header>
 
-        <form id="subscription-form" name="scholarship-subscription" method="POST" data-netlify="true" netlify-honeypot="bot-field">
-            <input type="hidden" name="form-name" value="scholarship-subscription">
+        <form id="subscription-form" name="scholarship-subscription" method="POST">
+            <!-- Honeypot field for spam protection -->
             <p class="hidden">
-                <label>Don't fill this out if you're human: <input name="bot-field"></label>
+                <label>Don't fill this out if you're human: <input name="bot-field" id="bot-field"></label>
             </p>
 
             <div class="form-group">
@@ -47,9 +47,6 @@
                 </div>
                 <span class="error-message" id="countries-error"></span>
             </fieldset>
-
-            <input type="hidden" id="countries-data" name="countries" value="">
-            <input type="hidden" id="timestamp" name="created_at" value="">
 
             <div class="form-actions">
                 <button type="submit" id="submit-btn" class="btn-primary">
