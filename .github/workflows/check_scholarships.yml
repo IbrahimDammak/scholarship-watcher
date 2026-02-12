@@ -12,8 +12,8 @@ name: Check Scholarships
 
 on:
   # Scheduled run - daily at 8:00 AM UTC
-  schedule:
-    - cron: '0 8 * * *'
+  # schedule:
+  #   - cron: '0 8 * * *'
   
   # Manual trigger with optional inputs
   workflow_dispatch:
